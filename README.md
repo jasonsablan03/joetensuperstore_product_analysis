@@ -1,2 +1,2 @@
 ## 📄 Full Project Write Up
-👉 [View the complete HorizonMart Project on Notion]
+👉 [View the complete Joeten Superstore Project on Notion]
