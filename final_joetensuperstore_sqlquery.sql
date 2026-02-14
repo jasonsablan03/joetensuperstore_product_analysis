@@ -1346,40 +1346,40 @@ FROM joetensuperstore_data_clean
 
 --- Add time column to measure and visualize monthly sales in later analysis ----------
 
-DROP TABLE IF EXISTS joetensuperstore_monthly_sales;
-CREATE TABLE joetensuperstore_monthly_sales AS
-SELECT sku, DATE '2024-12-01' AS month_date,  dec_24 AS sales FROM joetensuperstore_data_clean
+DROP TABLE IF EXISTS joetensuperstore_monthly_revenue;
+CREATE TABLE joetensuperstore_monthly_revenue AS
+SELECT sku, retail AS retail_price, DATE '2024-12-01' AS month_date,  dec_24 AS units_sold FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-01-01', jan_25 AS sales FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-01-01', jan_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-02-01', feb_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-02-01', feb_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-03-01', mar_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-03-01', mar_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-04-01', apr_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-04-01', apr_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-05-01', may_25 AS sales FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-05-01', may_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-06-01', jun_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-06-01', jun_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-07-01', jul_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-07-01', jul_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-08-01', aug_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-08-01', aug_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-09-01', sep_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-09-01', sep_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-10-01', oct_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-10-01', oct_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-11-01', nov_25 FROM joetensuperstore_data_clean
+SELECT sku, retail, DATE '2025-11-01', nov_25 FROM joetensuperstore_data_clean
 UNION ALL
-SELECT sku, DATE '2025-12-01', dec_25 FROM joetensuperstore_data_clean;
+SELECT sku, retail, DATE '2025-12-01', dec_25 FROM joetensuperstore_data_clean;
 
 SELECT
 	month_date,
-	SUM(sales) AS total_sales
-FROM joetensuperstore_monthly_sales
+	SUM(units_sold * retail_price) AS total_sales
+FROM joetensuperstore_monthly_revenue
 GROUP BY month_date
 ORDER BY month_date;
 
 SELECT *
-FROM joetensuperstore_monthly_sales
+FROM joetensuperstore_monthly_revenue
