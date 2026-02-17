@@ -1383,3 +1383,149 @@ ORDER BY month_date;
 
 SELECT *
 FROM joetensuperstore_monthly_revenue
+
+
+	
+-----------------------------------------------------------------------------------------------
+--- SIMULATING PRICE CHANGE IMPACT ------------------------------------------------------------
+-----------------------------------------------------------------------------------------------
+
+
+
+	
+--- create elasticity scoring bins to mimic true elasticity
+DROP TABLE IF EXISTS elasticity_scoring_bins;
+CREATE TABLE elasticity_scoring_bins (
+	bin_id serial PRIMARY KEY,
+	score_min numeric(4,2) NOT NULL,
+	score_max numeric(4,2) NOT NULL,
+	elasticity_coeff numeric(6,3) NOT NULL,
+	bin_label text NOT NULL
+);
+INSERT INTO elasticity_scoring_bins (score_min, score_max, elasticity_coeff, bin_label) VALUES
+(1.00, 1.80, -0.100, 'Very Inelastic'),
+(1.80, 2.60, -0.300, 'Inelastic'),
+(2.60, 3.40, -0.700, 'Moderate'),
+(3.40, 4.20, -1.200, 'Elastic'),
+(4.20, 5.01, -2.000, 'Very Elastic');
+
+--- create a baseline table for price change simulation
+DROP TABLE IF EXISTS pricing_baseline;
+CREATE TABLE pricing_baseline AS 
+	SELECT 
+		sku,
+		(total_units / 12) AS monthly_units
+	FROM final_joetens_dataset
+	WHERE total_units IS NOT NULL;
+
+
+--- create baseline table for elasticity coefficients
+DROP TABLE IF EXISTS baseline_metrics;
+CREATE TABLE baseline_metrics AS 
+	SELECT
+		b.sku,
+		b.monthly_units,
+		f.retail,
+		f.avg_cost,
+		f.elasticity_score,
+		eb.elasticity_coeff,
+		eb.bin_label
+	FROM pricing_baseline AS b
+	LEFT JOIN final_joetens_dataset AS f
+	ON f.sku = b.sku
+	LEFT JOIN elasticity_scoring_bins AS eb
+	ON f.elasticity_score >= eb.score_min 
+	AND f.elasticity_score < eb.score_max
+	WHERE f.retail IS NOT NULL
+	AND f.avg_cost IS NOT NULL;
+
+SELECT *
+FROM baseline_metrics
+
+-- create pricing and metric changes
+DROP TABLE IF EXISTS pricing_scenarios;
+CREATE TABLE pricing_scenarios (
+	scenario_name text,
+	pct_price_change numeric
+);
+INSERT INTO pricing_scenarios (scenario_name, pct_price_change) VALUES
+('Base (0%)', 0.00),
+('Increase 3%', 0.03),
+('Increase 5%', 0.05),
+('Increase 7%', 0.07);
+
+DROP TABLE IF EXISTS price_simulation;
+CREATE TABLE price_simulation AS 
+	SELECT
+		b.sku,
+		b.bin_label,
+		b.elasticity_score,
+		s.scenario_name,
+		s.pct_price_change,
+		b.monthly_units AS base_units,
+		b.retail AS base_retail,
+		b.avg_cost AS base_cost,
+		b.elasticity_coeff AS elasticity_coeff,
+
+		-- new price
+		(b.retail * (1 + s.pct_price_change))::numeric(12,2) AS new_retail,
+		-- %change quantity and new quantity
+	    (b.elasticity_coeff * s.pct_price_change)::numeric(12,4) AS pct_qty_change,
+
+         GREATEST(
+           (b.monthly_units * (1 + (b.elasticity_coeff * s.pct_price_change))),
+             0
+              )::numeric(12,2) AS new_quantity_units,
+		-- revenue
+		 (b.retail * b.monthly_units)::numeric(14,2) AS base_monthly_revenue,
+		-- profit
+		((b.retail - b.avg_cost) * b.monthly_units)::numeric(14,2) AS base_gross_profit,
+		-- new revenue
+		 ((b.retail * (1 + s.pct_price_change)) *
+          GREATEST(b.monthly_units * (1 + (b.elasticity_coeff * s.pct_price_change)), 0)
+           )::numeric(14,2) AS new_revenue,
+		-- new profit
+		 (((b.retail * (1 + s.pct_price_change)) - b.avg_cost) *
+         GREATEST(b.monthly_units * (1 + (b.elasticity_coeff * s.pct_price_change)), 0)
+          )::numeric(14,2) AS new_gross_profit
+	FROM baseline_metrics AS b
+	CROSS JOIN pricing_scenarios AS s;
+
+-- revenue and profit changes
+ALTER TABLE price_simulation
+ADD COLUMN revenue_uplift numeric(14,2),
+ADD COLUMN gross_profit_uplift numeric (14,2);
+
+UPDATE price_simulation
+SET
+	revenue_uplift = new_revenue - base_monthly_revenue,
+	gross_profit_uplift = new_gross_profit - base_gross_profit;
+
+--- add description column for clarity
+DROP TABLE IF EXISTS final_price_change_simulation;
+CREATE TABLE final_price_change_simulation AS 
+SELECT 
+	ps.*,
+	f.description,
+	((ps.base_retail - ps.base_cost) / ps.base_retail) AS margin
+FROM price_simulation AS ps
+LEFT JOIN final_joetens_dataset AS f
+ON ps.sku = f.sku;
+
+--- visualize results
+SELECT sku,
+	   description, 
+	   ROUND((margin * 100),1) AS margin,
+	   bin_label,
+	   elasticity_score,
+	   scenario_name,
+	   revenue_uplift,
+	   gross_profit_uplift,
+	   base_monthly_revenue,
+	   base_gross_profit, 
+	   pct_qty_change, 
+	   new_quantity_units
+	   
+FROM final_price_change_simulation
+WHERE elasticity_score IS NOT NULL
+ORDER BY revenue_uplift DESC
